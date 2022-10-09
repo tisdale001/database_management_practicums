@@ -1,0 +1,638 @@
+---
+title: "Practicum_2"
+output: html_notebook
+---
+
+### Part 1-1
+![Alt text](/Users/tisda/Desktop/CS5200/Practicum2/Practicum2_1.jpg)
+
+### Part 1-2
+```{r}
+library(RSQLite)
+
+fpath = "c:/Users/tisda/Downloads/sqlite/"
+dbfile = "pubmedDB.db"
+
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath, dbfile))
+```
+
+Drop Journal Table if exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Journal;
+```
+
+Create Journal Table
+```{sql connection=dbcon}
+CREATE TABLE Journal(
+  Journal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ISSN TEXT,
+  IssnType TEXT,
+  Volume TEXT,
+  Issue TEXT,
+  Year INT,
+  Month INT,
+  Title TEXT
+);
+```
+
+Drop Article Table if exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Article;
+```
+
+Create Article Table
+```{sql connection=dbcon}
+CREATE TABLE Article(
+  Article_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  PubModel TEXT,
+  ArticleTitle TEXT,
+  Language TEXT,
+  Journal_id INT,
+  FOREIGN KEY (Journal_id) REFERENCES Journal(Journal_id)
+);
+```
+
+Drop History Table if exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS History;
+```
+
+Create History Table
+```{sql connection=dbcon}
+CREATE TABLE History(
+  History_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  PubStatus TEXT,
+  Year INT,
+  Month INT,
+  Day INT,
+  Pub_date TEXT,
+  Article_id INT,
+  FOREIGN KEY (Article_id) REFERENCES Article(Article_id)
+);
+```
+
+Drop Author Table if exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author;
+```
+
+Create Author Table
+```{sql connection=dbcon}
+CREATE TABLE Author(
+  Author_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  LastName TEXT,
+  ForeName TEXT
+);
+```
+
+Drop Authorship Table if exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Authorship;
+```
+
+Create Authorship Table
+```{sql connection=dbcon}
+CREATE TABLE Authorship(
+  Authorship_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  Author_id INT,
+  Article_id INT,
+  FOREIGN KEY (Author_id) REFERENCES Author(Author_id),
+  FOREIGN KEY (Article_id) REFERENCES Article(Article_id)
+);
+```
+
+### Problem 1-3
+```{r}
+library(XML)
+
+my_xml <- "C:/Users/tisda/Downloads/pubmed_sample(1).xml"
+xml_doc <- xmlParse(my_xml, validate = FALSE)
+
+root_node <- xmlRoot(xml_doc)
+num_articles <- xmlSize(root_node)
+
+Article.df <- data.frame (Article_id = vector (mode = "integer", length = num_articles), PubModel = vector (mode = "character", length = num_articles), ArticleTitle = vector (mode = "character", length = num_articles), Language = vector (mode = "character", length = num_articles), Journal_id = vector (mode = "integer", length = num_articles), stringsAsFactors = F)
+
+Journal.df <- data.frame (Journal_id = vector (mode = "integer", length = num_articles),
+                          ISSN = vector (mode = "character", length = num_articles),
+                          IssnType = vector (mode = "character", length = num_articles),
+                          Volume = vector (mode = "character", length = num_articles),
+                          Issue = vector (mode = "character", length = num_articles),
+                          Year = vector (mode = "integer", length = num_articles),
+                          Month = vector (mode = "integer", length = num_articles),
+                          Title = vector (mode = "character", length = num_articles),
+                          stringsAsFactors = F)
+xpathEx = '//PubMedPubDate'
+history_values <- xpathSApply(root_node, xpathEx)
+num_histories <- length(history_values)
+History.df <- data.frame (History_id = vector (mode = 'integer', length = num_histories),
+                          PubStatus = vector (mode = 'character', length = num_histories),
+                          Year = vector (mode = 'integer', length = num_histories),
+                          Month = vector (mode = 'integer', length = num_histories),
+                          Day = vector (mode = 'integer', length = num_histories),
+                          Pub_date = vector (mode = 'character', length = num_histories),
+                          Article_id = vector (mode = 'integer', length = num_histories),
+                          stringsAsFactors = F)
+
+xpathEx <- '//Author'
+author_values <- xpathSApply(root_node, xpathEx)
+num_authors <- length(author_values)
+
+Author.df <- data.frame (Author_id = vector (mode = 'integer', length = num_authors),
+                         LastName = vector (mode = 'character', length = num_authors),
+                         ForeName = vector (mode = 'character', length = num_authors),
+                         stringsAsFactors = F)
+
+Authorship.df <- data.frame (Authorship_id = vector (mode = 'integer', length = num_authors),
+                             Author_id = vector (mode = 'integer', length = num_authors),
+                             Article_id = vector (mode = 'integer', length = num_authors),
+                             stringsAsFactors = F)
+
+
+
+```
+
+Populate data frames
+```{r}
+xpathEx <- '//PubmedArticle/MedlineCitation/Article/@PubModel'
+PubModel_values <- xpathSApply(root_node, xpathEx)
+
+index <- 1
+index2 <- 1
+
+for (i in 1:num_articles){
+  # populate Article data frame
+  Article.df$Article_id[i] <- i
+  Article.df$PubModel[i] <- PubModel_values[i]
+  xpathEx1 = paste0('//PubmedArticle[',i, ']//ArticleTitle')
+  Article.df$ArticleTitle[i] <- xpathSApply(root_node, xpathEx1, xmlValue)
+  xpathEx2 = paste0('//PubmedArticle[',i,']//Language')
+  Article.df$Language[i] <- xpathSApply(root_node, xpathEx2, xmlValue)
+  Article.df$Journal_id[i] <- i
+  
+  # populate Journal data frame
+  Journal.df$Journal_id[i] <- i
+  xpathEx3 = paste0('//PubmedArticle[',i,']/MedlineCitation/Article/Journal/ISSN')
+  Journal.df$ISSN[i] <- xpathSApply(root_node, xpathEx3, xmlValue)
+  xpathEx4 = paste0('//PubmedArticle[',i,']/MedlineCitation/Article/Journal/ISSN/@IssnType')
+  Journal.df$IssnType[i] <- xpathSApply(root_node, xpathEx4)
+  xpathEx5 = paste0('//PubmedArticle[',i,']/MedlineCitation/Article/Journal/JournalIssue/Volume')
+  Journal.df$Volume[i] <- xpathSApply(root_node, xpathEx5, xmlValue)
+  xpathEx6 = paste0('//PubmedArticle[',i,']/MedlineCitation/Article/Journal/JournalIssue/Issue')
+  Journal.df$Issue[i] <- xpathSApply(root_node, xpathEx6, xmlValue)
+  xpathEx7 = paste0('//PubmedArticle[',i,']/MedlineCitation/Article/Journal/JournalIssue/PubDate')
+  date_value <- xpathSApply(root_node, xpathEx7, xmlValue)
+  cat_date_value <- gsub(" ", "", date_value)
+  year <- substring(cat_date_value, 0, 4)
+  month <- substring(cat_date_value, 5, 7)
+  if (month == ''){
+    month_num <- 1
+  }
+  else {
+    month_num <- match(month, month.abb)
+  }
+  Journal.df$Year[i] <- as.numeric(year)
+  Journal.df$Month[i] <- as.numeric(month_num)
+  xpathEx8 = paste0('//PubmedArticle[',i,']/MedlineCitation/Article/Journal/Title')
+  Journal.df$Title[i] <- xpathSApply(root_node, xpathEx8, xmlValue)
+  
+  # populate History data frame
+  xpathEx9 = paste0('//PubmedArticle[',i,']//PubMedPubDate')
+  histories_per_article <- xpathSApply(root_node, xpathEx9)
+  num_hist_per_article <- length(histories_per_article)
+  
+  for (j in 1:num_hist_per_article){
+    History.df$History_id[index] <- index
+    xpathEx10 <- paste0('//PubmedArticle[',i,']/PubmedData/History/PubMedPubDate[',j,']/@PubStatus')
+    History.df$PubStatus[index] <- xpathSApply(root_node, xpathEx10)
+    xpathEx11 <- paste0('//PubmedArticle[',i,']/PubmedData/History/PubMedPubDate[',j,']/Year')
+    History.df$Year[index] <- xpathSApply(root_node, xpathEx11, xmlValue)
+    xpathEx12 <- paste0('//PubmedArticle[',i,']/PubmedData/History/PubMedPubDate[',j,']/Month')
+    History.df$Month[index] <- xpathSApply(root_node, xpathEx12, xmlValue)
+    xpathEx13 <- paste0('//PubmedArticle[',i,']/PubmedData/History/PubMedPubDate[',j,']/Day')
+    History.df$Day[index] <- xpathSApply(root_node, xpathEx13, xmlValue)
+    Pub_year <- xpathSApply(root_node, xpathEx11, xmlValue)
+    Pub_month <- xpathSApply(root_node, xpathEx12, xmlValue)
+    Pub_day <- xpathSApply(root_node, xpathEx13, xmlValue)
+    if (nchar(Pub_month)==1){
+      Pub_month <- paste0('0',Pub_month)
+    }
+    if (nchar(Pub_day)==1){
+      Pub_day <- paste0('0',Pub_day)
+    }
+    history_date_char <- paste0(Pub_year,'-',Pub_month,'-',Pub_day)
+    #history_date <- as.Date(history_date_char)
+    History.df$Pub_date[index] <- history_date_char
+    History.df$Article_id[index] <- i
+    
+    index <- index + 1
+  }
+  
+  # populate Author and Authorship data frames
+  xpathEx14 <- paste0('//PubmedArticle[',i,']//Author')
+  authors_per_article <- xpathSApply(root_node, xpathEx14)
+  num_authors_per_article <- length(authors_per_article)
+  for (j in 1:num_authors_per_article){
+    Author.df$Author_id[index2] <- index2
+    xpathEx15 <- paste0('//PubmedArticle[',i,']/MedlineCitation/Article/AuthorList/Author[',j,']/LastName')
+    Author.df$LastName[index2] <- xpathSApply(root_node, xpathEx15, xmlValue)
+    xpathEx16 <- paste0('//PubmedArticle[',i,']/MedlineCitation/Article/AuthorList/Author[',j,']/ForeName')
+    Author.df$ForeName[index2] <- xpathSApply(root_node, xpathEx16, xmlValue)
+    
+    Authorship.df$Authorship_id[index2] <- index2
+    Authorship.df$Author_id[index2] <- index2
+    Authorship.df$Article_id[index2] <- i
+    
+    index2 <- index2 + 1
+  }
+  
+
+}
+
+```
+
+Change relevant columns to integers
+```{r}
+History.df$Year <- as.integer(as.character(History.df$Year))
+History.df$Month <- as.integer(as.character(History.df$Month))
+History.df$Day <- as.integer(as.character(History.df$Day))
+#History.df$Pub_date <- as.Date(as.character(History.df$Pub_date))
+
+```
+
+Write all tables to SQLite database
+```{r}
+dbWriteTable(dbcon, "Journal", Journal.df, overwrite = TRUE)
+dbWriteTable(dbcon, "Article", Article.df, overwrite = TRUE)
+dbWriteTable(dbcon, "History", History.df, overwrite = TRUE)
+dbWriteTable(dbcon, "Author", Author.df, overwrite = TRUE)
+dbWriteTable(dbcon, "Authorship", Authorship.df, overwrite = TRUE)
+
+
+#for (i in 1:length(History.df$History_id)){
+#  sqlString1 <- paste0("INSERT INTO History VALUES #('",History.df$History_id[i],"','",History.df$PubSt#atus[i],"','",History.df$Year[i],"','",History.df$M#onth[i],"','",History.df$Day[i],"','",History.df$Pu#b_date[i],"','",History.df$Article_id[i],"');")
+  
+#  dbSendStatement(dbcon, sqlString1)
+  
+#}
+```
+
+
+
+Test Chunk: Show History Table
+```{sql connection=dbcon}
+SELECT * FROM History
+```
+
+
+
+### Part 2-1
+![Alt text](/Users/tisda/Desktop/CS5200/Practicum2/Practicum2_2_1.jpg)
+
+Create Star Schema: Part 2-1
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS AuthorListDim
+```
+
+Create AuthorListDim Dimension Table
+```{sql connection=dbcon}
+CREATE TABLE AuthorListDim(
+  AuthorList_id INT,
+  Author_id INT,
+  LastName TEXT,
+  ForeName TEXT
+)
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS HistoryListDim
+```
+
+Create HistoryListDim Dimension Table
+```{sql connection=dbcon}
+CREATE TABLE HistoryListDim(
+  HistoryList_id INT,
+  History_id INT,
+  PubStatus TEXT,
+  Year INT,
+  Month INT,
+  Day INT,
+  Pub_date TEXT
+)
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS JournalDim;
+```
+
+Create JournalDim Dimension Table
+```{sql connection=dbcon}
+CREATE TABLE JournalDim(
+  Journal_id INT PRIMARY KEY,
+  JournalTitle TEXT,
+  ISSN TEXT,
+  IssnType TEXT,
+  Volume TEXT,
+  Issue TEXT,
+  Year INT,
+  Month INT
+)
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS ArticleDim;
+```
+
+Create ArticleDim Dimension Table
+```{sql connection=dbcon}
+CREATE TABLE ArticleDim(
+  Article_id INT PRIMARY KEY,
+  ArticleTitle TEXT,
+  PubModel TEXT,
+  Language TEXT
+)
+```
+
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS TransactionFactTable
+```
+
+Create TransactionFactTable
+```{sql connection=dbcon}
+CREATE TABLE TransactionFactTable(
+  Article_id INT PRIMARY KEY,
+  Journal_id INT,
+  AuthorList_id INT,
+  HistoryList_id INT,
+  FOREIGN KEY (Article_id) REFERENCES ArticleDim(Article_id),
+  FOREIGN KEY (Journal_id) REFERENCES JournalDim(Journal_id),
+  FOREIGN KEY (AuthorList_id) REFERENCES AuthorListDim(AuthorList_id),
+  FOREIGN KEY (HistoryList_id) REFERENCES HistoryListDim(HistoryList_id)
+)
+```
+
+
+
+Populate Star Schema: Part 2-1
+Populate AuthorListDim table
+```{r}
+sql_statement <- 'INSERT INTO AuthorListDim(AuthorList_id, Author_id, LastName, ForeName)
+SELECT Article_id AS AuthorList_id, Author_id, LastName, ForeName FROM Author
+JOIN Authorship USING (Author_id);'
+dbSendStatement(dbcon, sql_statement)
+```
+
+Populate HistoryListDim table
+```{r}
+sql_statement <- 'INSERT INTO HistoryListDim(HistoryList_id, History_id, PubStatus, Year, Month, Day, Pub_date)
+SELECT Article_id AS HistoryList_id, History_id, PubStatus, Year, Month, Day, Pub_date FROM History;'
+
+dbSendStatement(dbcon, sql_statement)
+```
+
+Populate ArticleDim table
+```{r}
+sql_statement <- 'INSERT INTO ArticleDim(Article_id, ArticleTitle, PubModel, Language)
+SELECT Article_id, ArticleTitle, PubModel, Language
+FROM Article'
+dbSendStatement(dbcon, sql_statement)
+```
+
+Populate JournalDim Table
+```{r}
+sql_statement <- 'INSERT INTO JournalDim(Journal_id, JournalTitle, ISSN, IssnType, Volume, Issue, Year, Month)
+SELECT Journal_id, Title AS JournalTitle, ISSN, IssnType, Volume, Issue, Year, Month 
+FROM Journal;'
+dbSendStatement(dbcon, sql_statement)
+```
+
+
+Populate TransactionFactTable
+```{r}
+sql_statement <- 'INSERT INTO TransactionFactTable(Article_id, Journal_id, AuthorList_id, HistoryList_id)
+SELECT Article_id, Article_id AS Journal_id, Article_id AS AuthorList_id, Article_id AS HistoryList_id FROM Article;'
+dbSendStatement(dbcon, sql_statement)
+```
+
+### Part 2-2
+![Alt text](/Users/tisda/Desktop/CS5200/Practicum2/Practicum2_2_2.jpg)
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS SummaryTable
+```
+
+Create SummaryTable
+```{sql connection=dbcon}
+CREATE TABLE SummaryTable(
+  Year INT,
+  Quarter INT,
+  Article_id INT,
+  AuthorList_id INT,
+  Journal_id INT,
+  HistoryList_id INT,
+  Num_articles INT,
+  FOREIGN KEY (Article_id) REFERENCES ArticleDim(Article_id),
+  FOREIGN KEY (AuthorList_id) REFERENCES AuthorListDim(AuthorList_id),
+  FOREIGN KEY (Journal_id) REFERENCES JournalDim(Journal_id),
+  FOREIGN KEY (HistoryList_id) REFERENCES HistoryListDim(HistoryList_id)
+);
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS SummaryTest;
+```
+
+
+Create SummaryTest Table
+This is a preliminary table that is necessary to build the SummaryTable
+```{sql connection=dbcon}
+
+CREATE TABLE SummaryTest(
+  Year INT,
+  Quarter INT,
+  Article_id INT,
+  AuthorList_id INT,
+  Journal_id INT,
+  HistoryList_id INT
+)
+```
+
+Create SummaryTest.df and populate SummaryTest Table
+```{r}
+num_articles <- nrow(Article.df)
+SummaryTest.df <- data.frame (Year = vector (mode = "integer", length = num_articles),
+                              Quarter = vector (mode = "integer", length = num_articles),
+                              Article_id = vector (mode = "integer", length = num_articles),
+                              AuthorList_id = vector (mode = "integer", length = num_articles),
+                              Journal_id = vector (mode = "integer", length = num_articles),
+                              HistoryList_id = vector (mode = "integer", length = num_articles),
+                              stringsAsFactors = F)
+
+sql_statement <- 'INSERT INTO SummaryTest(Year, Quarter, Article_id, AuthorList_id, Journal_id, HistoryList_id) SELECT Year,
+CASE
+  WHEN JournalDim.Month < 4 THEN 1
+  WHEN JournalDim.Month < 7 THEN 2
+  WHEN JournalDim.Month < 10 THEN 3
+  WHEN JournalDim.Month < 13 THEN 4
+END AS Quarter,
+Article_id, AuthorList_id, Journal_id, HistoryList_id
+FROM TransactionFactTable
+JOIN JournalDim USING (Journal_id)
+ORDER BY Article_id;'
+
+dbSendStatement(dbcon, sql_statement)
+SummaryTest.df <- dbReadTable(dbcon, 'SummaryTest')
+SummaryTest.df
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS GetNumArticles;
+```
+
+Create GetNumArticles Table
+This is another temporary table to help create SummaryTable later on.
+```{sql connection=dbcon}
+CREATE TABLE GetNumArticles(
+  Year INT,
+  Quarter INT,
+  Num_articles INT
+)
+```
+
+Create GetNumArticles.df
+```{r}
+num_rows <- 5
+GetNumArticles.df <- data.frame (Year = vector (mode = "integer", length = num_rows),
+                                 Quarter = vector (mode = "integer", length = num_rows),
+                                 Num_articles = vector (mode = "integer", length = num_rows),
+                                 stringsAsFactors = F)
+
+sql_statement <- 'INSERT INTO GetNumArticles(Year, Quarter, Num_articles) SELECT Year,
+CASE
+  WHEN JournalDim.Month < 4 THEN 1
+  WHEN JournalDim.Month < 7 THEN 2
+  WHEN JournalDim.Month < 10 THEN 3
+  WHEN JournalDim.Month < 13 THEN 4
+END AS Quarter,
+COUNT(Article_id) AS Num_articles
+FROM TransactionFactTable
+JOIN JournalDim USING (Journal_id)
+GROUP BY Year, Quarter;'
+
+dbSendStatement(dbcon, sql_statement)
+GetNumArticles.df <- dbReadTable(dbcon, 'GetNumArticles')
+GetNumArticles.df
+```
+
+
+Populate SummaryTable
+```{r}
+num_rows <- 22
+SummaryTable.df <- data.frame (Year = vector (mode = "integer", length = num_rows),
+                                Quarter = vector (mode = "integer", length = num_rows),
+                                 Article_id = vector (mode = "integer", length = num_rows),
+                                  AuthorList_id = vector (mode = "integer", length = num_rows),
+                                   Journal_id = vector (mode = "integer", length = num_rows),
+                               HistoryList_id = vector (mode = "integer", length = num_rows),
+                                    Num_articles = vector (mode = "integer", length = num_rows),
+                                    stringsAsFactors = F)
+
+index <- 1
+for (i in 2012:2013){
+  for (j in 1:4){
+    alpha <- 0
+    for (k in 1:nrow(Article.df)){
+      if (SummaryTest.df$Year[k] == i &
+          SummaryTest.df$Quarter[k] == j){
+        SummaryTable.df$Year[index] <- i
+        SummaryTable.df$Quarter[index] <- j
+        SummaryTable.df$Article_id[index] <- k 
+        SummaryTable.df$AuthorList_id[index] <- k
+        SummaryTable.df$Journal_id[index] <- k
+        SummaryTable.df$HistoryList_id[index] <- k
+        alpha <- 1
+        num_articles <- 0
+        for (l in 1:5){
+          if (GetNumArticles.df$Year[l] == i &
+              GetNumArticles.df$Quarter[l] == j){
+            num_articles <- GetNumArticles.df$Num_articles[l]
+            }
+      }
+        SummaryTable.df$Num_articles[index] <- num_articles
+        index <- index + 1
+      }
+      
+    }
+    if (alpha == 0){
+        SummaryTable.df$Year[index] <- i
+        SummaryTable.df$Quarter[index] <- j
+        SummaryTable.df$Article_id[index] <- 0 
+        SummaryTable.df$AuthorList_id[index] <- 0
+        SummaryTable.df$Journal_id[index] <- 0
+        SummaryTable.df$HistoryList_id[index] <- 0
+        SummaryTable.df$Num_articles[index] <- 0
+        index <- index + 1
+    }
+  }
+}
+dbWriteTable(dbcon, 'SummaryTable', SummaryTable.df, overwrite = TRUE)
+```
+
+Show SummaryTable
+```{sql connection=dbcon}
+SELECT * FROM SummaryTable;
+```
+
+
+### Problem 3-1
+Explore and Mine Data
+Shown here is number of articles published per quarter in a bar graph
+```{r}
+rs <- dbGetQuery(dbcon, "SELECT Year, Quarter, Num_articles
+FROM SummaryTable
+GROUP BY Year, Quarter;")
+
+barplot(rs$Quarter, rs$Num_articles, 
+        main = "Articles per Quarter",
+        xlab = "2012 - 2013", 
+        ylab = "Number Articles",
+        names.arg = c("Q1","Q2","Q3","Q4", "Q1", "Q2", "Q3", "Q4"),
+        col = "darkred")
+```
+
+
+The below bar graph shows number of days till publication for each article.
+```{r}
+rs <- dbGetQuery(dbcon, "SELECT Article_id, min_date, max_date, JULIANDAY(Date(max_date)) - JULIANDAY(Date(min_date)) AS date_difference FROM
+(SELECT HistoryList_id, Article_id, History_id, MIN(Date(Pub_date)) AS min_date, MAX(Date(Pub_date)) AS max_date FROM HistoryListDim
+JOIN TransactionFactTable USING (HistoryList_id)
+GROUP BY HistoryList_id)
+GROUP BY Article_id;")
+
+barplot(rs$date_difference, rs$Article_id, 
+        main = "Days Until Publication",
+        xlab = "Article_id", 
+        ylab = "Days",
+        names.arg = c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19"),
+        col = "darkred")
+```
+
+
+Below is a line graph which shows the ammount of days it took to publish an article per quarter.
+```{r}
+rs <- dbGetQuery(dbcon, "SELECT Year, Quarter, JULIANDAY(Date(max_date)) - JULIANDAY(Date(min_date)) AS date_difference FROM
+(SELECT HistoryList_id, SummaryTable.Year AS Year, Quarter, MIN(Date(Pub_date)) AS min_date, MAX(Date(Pub_date)) AS max_date FROM SummaryTable
+JOIN HistoryListDim USING (HistoryList_id)
+GROUP BY HistoryList_id)
+GROUP BY Year,Quarter;")
+
+plot(rs$date_difference, type = "o", xlab = "Quarters", ylab = "Days to Publish", main = "Days to Publish Per Quarter", col = "blue")
+```
+
+
+
+
+```{r}
+dbDisconnect(dbcon)
+```

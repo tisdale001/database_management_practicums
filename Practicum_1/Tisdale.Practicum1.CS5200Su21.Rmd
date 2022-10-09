@@ -1,0 +1,342 @@
+---
+title: "Tisdale_Practicum_1"
+output: html_notebook
+---
+
+```{r}
+library(RMySQL)
+library(DBI)
+library(sqldf)
+
+db_user <- 'lucianTisdale'
+db_password <- 'Lucian74!'
+db_name <- 'Practicum1DB'
+db_host <- 'cs5200-dbs.crzk8q7ev1n4.us-east-2.rds.amazonaws.com'
+db_port <- 3306
+
+mydb <- dbConnect(MySQL(), user = db_user, password = db_password, dbname = db_name, host = db_host, port = db_port)
+```
+
+```{sql connection=mydb}
+SET FOREIGN_KEY_CHECKS=1;
+```
+Benjamin Lucian Tisdale: working solo.
+Email: tisdale.b@northeastern.edu
+
+# Problem 1
+![Alt text](/Users/tisda/Desktop/CS5200/Practicum1/Tisdale_Practicum1_ERD.jpeg)
+
+# Problem 2
+
+Problem 2 begins here:
+```{sql connection=mydb}
+DROP TABLE IF EXISTS Airport
+```
+
+```{sql connection=mydb}
+CREATE TABLE Airport(
+  Airport_id INT PRIMARY KEY,
+  name TEXT,
+  origin_state TEXT
+);
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS Aircraft
+```
+
+```{sql connection=mydb}
+CREATE TABLE Aircraft(
+  Aircraft_id INT PRIMARY KEY,
+  make_model TEXT,
+  operator TEXT,
+  number_engines INT,
+  is_large TEXT
+);
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS Wildlife
+```
+
+```{sql connection=mydb}
+CREATE TABLE Wildlife(
+  Wildlife_id INT PRIMARY KEY,
+  species VARCHAR(50),
+  size VARCHAR(50)
+);
+```
+
+
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS Conditions
+```
+
+```{sql connection=mydb}
+CREATE TABLE Conditions(
+  Conditions_id INT PRIMARY KEY,
+  precipitation TEXT,
+  sky TEXT
+);
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS Effect
+```
+
+```{sql connection=mydb}
+CREATE TABLE Effect(
+  Effect_id INT PRIMARY KEY,
+  impact_to_flight TEXT,
+  indicated_damage TEXT,
+  number_injured INT
+);
+```
+
+
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS Strike_event
+```
+
+```{sql connection=mydb}
+CREATE TABLE Strike_event(
+  Record_id INT PRIMARY KEY,
+  number_struck_range TEXT,
+  number_struck_actual TEXT,
+  flight_date DATE,
+  time TEXT,
+  phase_of_flight TEXT,
+  remains_collected TEXT,
+  remains_to_Smithsonian TEXT,
+  pilot_warned TEXT,
+  feet_above_ground NUMERIC,
+  altitude_bin TEXT,
+  total_cost NUMERIC,
+  remarks TEXT,
+  Wildlife_id INT,
+  Conditions_id INT,
+  Aircraft_id INT,
+  Effect_id INT,
+  Airport_id INT,
+  FOREIGN KEY (Wildlife_id) REFERENCES Wildlife (Wildlife_id),
+  FOREIGN KEY (Conditions_id) REFERENCES Conditions (Conditions_id),
+  FOREIGN KEY (Aircraft_id) REFERENCES Aircraft (Aircraft_id),
+  FOREIGN KEY (Effect_id) REFERENCES Effect (Effect_id),
+  FOREIGN KEY (Airport_id) REFERENCES Airport (Airport_id)
+);
+```
+
+# Problem 3
+Here I begin to parse the csv file.
+```{r}
+df <- read.csv(file = "c:/users/tisda/downloads/birdstrikesdata.csv", 
+               header = T,
+               stringsAsFactors = FALSE,
+               col.names = c("Record_id","type","name","altitude_bin","make_model","number_struck_range","number_struck_actual","impact_to_flight","flight_date","indicated_damage","number_engines","operator","origin_state","phase_of_flight","precipitation","remains_collected","remains_to_Smithsonian","remarks","size","sky","species","pilot_warned","total_cost","feet_above_ground","number_injured","is_large"))
+head(df, 6)
+```
+
+Loading data in Strike_event table
+```{r}
+Strike_event_df <- df[,c("Record_id","number_struck_range","number_struck_actual","flight_date","phase_of_flight","remains_collected","remains_to_Smithsonian","pilot_warned","feet_above_ground","altitude_bin","remarks","total_cost")]
+vec <- c(1:nrow(Strike_event_df))
+Strike_event_df$Wildlife_id <- vec
+Strike_event_df$Conditions_id <- vec
+Strike_event_df$Aircraft_id <- vec
+Strike_event_df$Effect_id <- vec
+Strike_event_df$Airport_id <- vec
+
+Strike_event_df$date <- sapply(strsplit(as.character(Strike_event_df$flight_date), " "), "[", 1)
+Strike_event_df$time <- sapply(strsplit(as.character(Strike_event_df$flight_date), " "), "[", 2)
+
+
+Strike_event_df$date <- paste(
+   sapply(strsplit(Strike_event_df$date, "/"), "[", 3),
+   sapply(strsplit(Strike_event_df$date, "/"), "[", 1),
+   sapply(strsplit(Strike_event_df$date, "/"), "[", 2),
+   sep = "-")
+
+Strike_event_df$date <- as.Date(
+  Strike_event_df$date)
+
+Strike_event_df <- subset(Strike_event_df, select= -c(flight_date))
+Strike_event_df$flight_date <- Strike_event_df$date
+Strike_event_df <- subset(Strike_event_df, select=-c(date))
+dbWriteTable(mydb, "Strike_event", Strike_event_df, overwrite = TRUE)
+
+```
+
+Look at Table Strike_event
+```{sql connection=mydb}
+SELECT * FROM Strike_event
+LIMIT 10
+```
+
+
+Populate Wildlife Table
+```{r}
+wildlife_df <- df[,c("species", "size")]
+
+vec <- c(1:nrow(wildlife_df))
+wildlife_df$Wildlife_id <- vec
+
+dbWriteTable(mydb, "Wildlife", wildlife_df, overwrite = TRUE)
+```
+Check Wildlife Table
+```{sql connection=mydb}
+SELECT * FROM Wildlife
+LIMIT 10
+```
+
+
+Populate Conditions Table
+```{r}
+Conditions_df <- df[,c("precipitation", "sky")]
+Conditions_df$Conditions_id <- c(1:nrow(Conditions_df))
+
+dbWriteTable(mydb, "Conditions", Conditions_df, overwrite = TRUE)
+```
+
+Check data in Creations Table
+```{sql connection=mydb}
+SELECT * FROM Conditions
+LIMIT 10
+```
+
+Populate Effect Table
+```{r}
+Effect_df <- df[,c("impact_to_flight", "indicated_damage", "number_injured")]
+Effect_df$Effect_id <- c(1:nrow(Effect_df))
+
+dbWriteTable(mydb, "Effect", Effect_df, overwrite = TRUE)
+```
+
+Check Effect Table
+```{sql connection=mydb}
+SELECT * FROM Effect
+LIMIT 10
+```
+
+Populate Aircraft Table
+```{r}
+Aircraft_df <- df[,c("make_model", "operator", "number_engines", "is_large")]
+Aircraft_df$Aircraft_id <- c(1:nrow(Aircraft_df))
+
+dbWriteTable(mydb, "Aircraft", Aircraft_df, overwrite = TRUE)
+```
+
+Check Aircraft Table
+```{sql connection=mydb}
+SELECT * FROM Aircraft
+LIMIT 10
+```
+
+Populate Airport Table
+```{r}
+Airport_df <- df[,c("name", "origin_state")]
+Airport_df$Airport_id <- c(1:nrow(Airport_df))
+
+dbWriteTable(mydb, "Airport", Airport_df, overwrite = TRUE)
+
+```
+Check Airport Table
+```{sql connection=mydb}
+SELECT * FROM Airport
+LIMIT 10
+```
+
+# Problem 4
+```{sql connection=mydb}
+SELECT operator, COUNT(Record_id) AS number_birdstrikes FROM Strike_event s
+  JOIN Aircraft a ON s.Aircraft_id = a.Aircraft_id
+  WHERE s.phase_of_flight LIKE '%Take-off%' OR
+  s.phase_of_flight LIKE '%take-off%' OR
+  s.phase_of_flight LIKE '%Climb%' OR
+  s.phase_of_flight LIKE '%climb%'
+  GROUP BY a.operator;
+```
+
+# Problem 5
+```{sql connection=mydb}
+SELECT name, COUNT(Record_id) AS number_birdstrikes
+FROM Strike_event s
+JOIN Airport a ON s.Airport_id = a.Airport_id
+GROUP BY a.name
+ORDER BY number_birdstrikes DESC;
+```
+
+# Problem 6
+```{sql connection=mydb}
+SELECT YEAR(flight_date) AS flight_year, COUNT(Record_id) AS number_birdstrikes
+FROM Strike_event
+GROUP BY flight_year
+ORDER BY flight_year ASC;
+```
+
+# Problem 7
+```{r}
+rs <- dbGetQuery(mydb, "SELECT YEAR(flight_date) AS flight_year, COUNT(Record_id) AS number_birdstrikes
+FROM Strike_event
+WHERE (YEAR(flight_date) >= 2008
+AND YEAR(flight_date) <= 2011)
+AND (phase_of_flight LIKE '%ake-off%'
+OR phase_of_flight LIKE '%limb%'
+OR phase_of_flight LIKE '%land%'
+OR phase_of_flight LIKE '%Land%'
+OR phase_of_flight LIKE '%pproach%'
+OR phase_of_flight LIKE '%Descent%')
+GROUP BY flight_year
+ORDER BY flight_year ASC;")
+
+barplot(rs$number_birdstrikes, rs$flight_year, 
+        main = "Bird Strikes Per Year",
+        xlab = "Flight Year", 
+        ylab = "Number of Bird Strikes",
+        names.arg = c("2008","2009","2010","2011"),
+        col = "darkred")
+```
+
+# Problem 8
+```{sql connection=mydb}
+DROP PROCEDURE IF EXISTS deleteFromStrikeEvent;
+```
+
+
+```{sql connection=mydb}
+
+CREATE PROCEDURE deleteFromStrikeEvent(
+    IN bird_strike_id INT
+)
+BEGIN
+  DELETE FROM Strike_event
+  WHERE Record_id = bird_strike_id;
+END;
+
+
+```
+
+Here I show stike_event.
+```{sql connection=mydb}
+SELECT * FROM Strike_event
+LIMIT 5
+```
+
+Here I make a call to my stored procedure.
+```{sql connection=mydb}
+CALL deleteFromStrikeEvent(202152);
+```
+
+Here I show the Strike_event data with the first birdstrike (202152) deleted.
+```{sql connection=mydb}
+SELECT * FROM Strike_event
+LIMIT 5;
+```
+
+
+
+
+```{r}
+dbDisconnect(mydb)
+```
